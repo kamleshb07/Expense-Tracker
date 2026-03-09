@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Expense Tracker Pro</title>
+    <style>
+        :root { --primary: #2c3e50; --accent: #3498db; --bg: #f4f7f6; }
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; background: var(--bg); height: 100vh; overflow: hidden; }
+        
+        /* Auth Styles */
+        #auth-screen { display: flex; justify-content: center; align-items: center; height: 100vh; }
+        .auth-box { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 320px; }
+        
+        /* Dashboard Styles */
+        #main-dashboard { display: none; height: 100vh; }
+        .sidebar { width: 260px; background: var(--primary); color: white; padding: 25px; display: flex; flex-direction: column; }
+        .sidebar h2 { margin-top: 0; border-bottom: 1px solid #444; padding-bottom: 15px; }
+        .nav-link { color: #bdc3c7; text-decoration: none; padding: 12px; cursor: pointer; display: block; border-radius: 6px; margin: 5px 0; }
+        .nav-link:hover, .nav-link.active { background: #34495e; color: white; }
+        
+        .main-content { flex: 1; padding: 40px; overflow-y: auto; }
+        .section { display: none; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        .section.active { display: block; }
+
+        /* UI Elements */
+        input, select { display: block; width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        .btn-primary { background: var(--accent); color: white; }
+        .btn-logout { background: #e74c3c; color: white; margin-top: auto; }
+        .expense-card { border-bottom: 1px solid #eee; padding: 15px 0; display: flex; justify-content: space-between; align-items: center; }
+        .delete-btn { background: #ffeded; color: #e74c3c; width: auto; padding: 5px 10px; font-size: 0.8rem; }
+    </style>
+</head>
+<body>
+
+    <!-- AUTHENTICATION SCREEN -->
+    <div id="auth-screen">
+        <div class="auth-box">
+            <h2 id="auth-title">Login</h2>
+            <input type="text" id="username" placeholder="Username">
+            <input type="password" id="password" placeholder="Password">
+            
+            <div style="display: flex; align-items: center; margin-bottom: 15px;">
+                <input type="checkbox" id="show-pw" onclick="togglePassword()" style="width: auto; margin-right: 8px;">
+                <label for="show-pw" style="font-size: 0.85rem; cursor: pointer;">Show Password</label>
+            </div>
+
+            <button class="btn-primary" onclick="handleAuth()" id="auth-btn">Login</button>
+            <p style="text-align:center; font-size: 0.85rem; margin-top: 15px;">
+                <a href="#" onclick="toggleAuthMode()" id="auth-toggle">Need an account? Register</a>
+            </p>
+        </div>
+    </div>
+
+    <!-- MAIN DASHBOARD -->
+    <div id="main-dashboard">
+        <nav class="sidebar">
+            <h2>Expensify</h2>
+            <a class="nav-link active" onclick="showSection('add-section', this)">Add Expense</a>
+            <a class="nav-link" onclick="showSection('view-section', this)">View History</a>
+            <a class="nav-link" onclick="showSection('summary-section', this)">Monthly Summary</a>
+            <button class="btn-logout" onclick="logout()">Logout</button>
+        </nav>
+
+        <main class="main-content">
+            <!-- Section: Add -->
+            <div id="add-section" class="section active">
+                <h3>Add New Transaction</h3>
+                <input type="date" id="date">
+                <input type="number" id="amount" placeholder="Amount">
+                <input type="text" id="category" placeholder="Category (e.g., Food)">
+                <input type="text" id="description" placeholder="Description">
+                <button class="btn-primary" onclick="addExpense()">Save Expense</button>
+            </div>
+
+            <!-- Section: View -->
+            <div id="view-section" class="section">
+                <h3>Transaction History</h3>
+                <div id="list-container"></div>
+            </div>
+
+            <!-- Section: Summary -->
+            <div id="summary-section" class="section">
+                <h3>Spending by Category</h3>
+                <div id="summary-container"></div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const API_URL = "http://127.0.0.1:5000";
+        let isLogin = true;
+
+        // AUTH FUNCTIONS
+        function togglePassword() {
+            const pw = document.getElementById("password");
+            pw.type = document.getElementById("show-pw").checked ? "text" : "password";
+        }
+
+        function toggleAuthMode() {
+            isLogin = !isLogin;
+            document.getElementById("auth-title").innerText = isLogin ? "Login" : "Register";
+            document.getElementById("auth-btn").innerText = isLogin ? "Login" : "Register";
+            document.getElementById("auth-toggle").innerText = isLogin ? "Need an account? Register" : "Have an account? Login";
+        }
+
+        async function handleAuth() {
+            const username = document.getElementById("username").value;
+            const password = document.getElementById("password").value;
+            const path = isLogin ? "/login" : "/register";
+
+            const res = await fetch(API_URL + path, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password }),
+                // CRITICAL FIX: Include credentials during login to save the session cookie
+                credentials: 'include' 
+            });
+
+            if (res.ok) {
+                if (isLogin) {
+                    document.getElementById("auth-screen").style.display = "none";
+                    document.getElementById("main-dashboard").style.display = "flex";
+                    showSection('view-section');
+                } else {
+                    alert("Account created! Please login.");
+                    toggleAuthMode();
+                }
+            } else {
+                const data = await res.json();
+                alert(data.message);
+            }
+        }
+
+        async function logout() {
+            await fetch(API_URL + '/logout', { credentials: 'include' });
+            location.reload();
+        }
+
+        // NAVIGATION
+        function showSection(id, element) {
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+            if(element) element.classList.add('active');
+
+            if(id === 'view-section') loadExpenses();
+            if(id === 'summary-section') loadSummary();
+        }
+
+        // CORE FEATURES
+        async function addExpense() {
+            const data = {
+                date: document.getElementById("date").value,
+                amount: document.getElementById("amount").value,
+                category: document.getElementById("category").value,
+                description: document.getElementById("description").value
+            };
+
+            // Double check that user filled the fields
+            if(!data.date || !data.amount) {
+                alert("Please fill in the date and amount.");
+                return;
+            }
+
+            const response = await fetch(API_URL + '/add', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+                credentials: 'include'
+            });
+
+            if (response.ok) {
+                alert("Expense Saved!");
+                // Clear the form
+                document.getElementById("amount").value = "";
+                document.getElementById("description").value = "";
+                showSection('view-section');
+            } else {
+                alert("Failed to save. Make sure you are logged in.");
+            }
+        }
+
+        async function loadExpenses() {
+            const res = await fetch(API_URL + '/view', { credentials: 'include' });
+            
+            if (res.status === 401) {
+                location.reload(); // Force login if session expired
+                return;
+            }
+
+            const data = await res.json();
+            const container = document.getElementById("list-container");
+            
+            if (data.length === 0) {
+                container.innerHTML = "<p>No history found.</p>";
+                return;
+            }
+
+            container.innerHTML = data.map(e => `
+                <div class="expense-card">
+                    <div><strong>${e.date}</strong> - ${e.category}<br><small>${e.description}</small></div>
+                    <div><strong>₹${parseFloat(e.amount).toFixed(2)}</strong> <button class="delete-btn" onclick="deleteExp(${e.id})">Delete</button></div>
+                </div>
+            `).join('');
+        }
+
+        async function deleteExp(id) {
+            if(confirm("Delete this entry?")) {
+                await fetch(`${API_URL}/delete/${id}`, { 
+                    method: 'DELETE', 
+                    credentials: 'include' 
+                });
+                loadExpenses();
+            }
+        }
+
+        async function loadSummary() {
+            const res = await fetch(API_URL + '/summary', { credentials: 'include' });
+            const data = await res.json();
+            const container = document.getElementById("summary-container");
+            
+            const entries = Object.entries(data);
+            if (entries.length === 0) {
+                container.innerHTML = "<p>Add expenses to see a summary.</p>";
+                return;
+            }
+
+            container.innerHTML = "<ul>" + entries.map(([cat, val]) => `
+                <li>${cat}: <strong>₹${val.toFixed(2)}</strong></li>
+            `).join('') + "</ul>";
+        }
+    </script>
+</body>
+</html>
